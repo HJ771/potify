@@ -63,6 +63,9 @@ def main(page: ft.Page):
     folder_picker = ft.FilePicker(on_result=pick_folder_result)
     page.overlay.extend([file_picker, folder_picker])
 
+    progress_slider = ft.Slider(min=0, max=100, value=0, disabled=True)
+    progress_text = ft.Text("00:00 / 00:00", color="white", size=12)
+
     def get_song_duration(file_path):
         try:
             audio = MP3(file_path)
@@ -78,8 +81,11 @@ def main(page: ft.Page):
             song_duration = get_song_duration(song_list[index])
             if song_duration == 0:
                 return
+            progress_slider.max = song_duration
+            progress_slider.value = 0
             pygame.mixer.music.play()
             is_playing = True
+            page.run_task(update_progress)
             status_text.value = f"Reproduciendo: {Path(song_list[index]).name}"
             page.update()
 
@@ -97,13 +103,31 @@ def main(page: ft.Page):
     def stop_song(e):
         pygame.mixer.music.stop()
         is_playing = False
+        progress_slider.value = 0
+        progress_text.value = "00:00 / 00:00"
         status_text.value = "Detenido"
         page.update()
+
+    async def update_progress():
+        while is_playing and current_song_index is not None:
+            position = pygame.mixer.music.get_pos() / 1000
+            if position >= song_duration:
+                stop_song(None)
+                break
+            progress_slider.value = position
+            progress_text.value = f"{format_time(position)} / {format_time(song_duration)}"
+            page.update()
+            await asyncio.sleep(0.5)
+
+    def format_time(seconds):
+        minutes = int(seconds // 60)
+        seconds = int(seconds % 60)
+        return f"{minutes:02}:{seconds:02}"
 
     upload_button = ft.ElevatedButton("Subir Música", icon=ft.icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=True))
     folder_button = ft.ElevatedButton("Subir Carpeta", icon=ft.icons.FOLDER_OPEN, on_click=lambda _: folder_picker.get_directory_path())
     
-    play_button = ft.IconButton(icon=ft.icons.PLAY_ARROW, on_click=lambda _: play_song(0, uploaded_songs))
+    play_button = ft.IconButton(icon=ft.icons.PLAY_ARROW, on_click=lambda _: play_song(current_song_index or 0, uploaded_songs))
     pause_button = ft.IconButton(icon=ft.icons.PAUSE, on_click=toggle_pause)
     stop_button = ft.IconButton(icon=ft.icons.STOP, on_click=stop_song)
 
@@ -118,7 +142,9 @@ def main(page: ft.Page):
             ft.Text("Playlist", color="white", size=16, weight=ft.FontWeight.BOLD),
             playlist_table,
             ft.Row([play_button, pause_button, stop_button], alignment=ft.MainAxisAlignment.CENTER),
-            status_text
+            ft.Container(content=progress_slider, margin=ft.margin.only(left=20, right=20, top=20)),
+            ft.Container(content=progress_text, alignment=ft.alignment.center, margin=ft.margin.only(top=10)),
+            ft.Container(content=status_text, alignment=ft.alignment.center, margin=ft.margin.only(top=20)),
         ], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
     )
 
