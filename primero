@@ -1,0 +1,48 @@
+import flet as ft
+import pygame
+
+pygame.mixer.init()
+
+def main(page: ft.Page):
+    page.title = "Potify - Music Player"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#121212"
+    page.window_width = 400
+    page.window_height = 750
+    page.window_resizable = False
+
+    title = ft.Text("Potify", size=40, color="#BB86FC", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+
+    uploaded_table = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("Nombre del Archivo", color="white")),
+        ],
+        rows=[],
+        bgcolor="#1E1E1E",
+        border=ft.border.all(1, "#BB86FC")
+    )
+
+    playlist_table = ft.DataTable(
+        columns=[
+            ft.DataColumn(ft.Text("Nombre del Archivo", color="white")),
+        ],
+        rows=[],
+        bgcolor="#1E1E1E",
+        border=ft.border.all(1, "#BB86FC")
+    )
+
+    upload_button = ft.ElevatedButton("Subir Música", icon=ft.icons.UPLOAD_FILE)
+    folder_button = ft.ElevatedButton("Subir Carpeta", icon=ft.icons.FOLDER_OPEN)
+
+    page.add(
+        ft.Column([
+            title,
+            ft.Row([upload_button, folder_button], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Text("Canciones Individuales", color="white", size=16, weight=ft.FontWeight.BOLD),
+            uploaded_table,
+            ft.Text("Playlist", color="white", size=16, weight=ft.FontWeight.BOLD),
+            playlist_table,
+        ], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
+    )
+
+ft.app(target=main)
