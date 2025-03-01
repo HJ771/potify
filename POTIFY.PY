@@ -1,7 +1,9 @@
 import flet as ft
 import pygame
 import os
+import asyncio
 from pathlib import Path
+from mutagen.mp3 import MP3
 
 pygame.mixer.init()
 
@@ -15,6 +17,9 @@ def main(page: ft.Page):
 
     uploaded_songs = []
     playlist_songs = []
+    current_song_index = None
+    song_duration = 0
+    is_playing = False
 
     title = ft.Text("Potify", size=40, color="#BB86FC", weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
 
@@ -58,8 +63,51 @@ def main(page: ft.Page):
     folder_picker = ft.FilePicker(on_result=pick_folder_result)
     page.overlay.extend([file_picker, folder_picker])
 
+    def get_song_duration(file_path):
+        try:
+            audio = MP3(file_path)
+            return int(audio.info.length)
+        except:
+            return 0
+
+    def play_song(index, song_list):
+        nonlocal current_song_index, song_duration, is_playing
+        if 0 <= index < len(song_list):
+            current_song_index = index
+            pygame.mixer.music.load(song_list[index])
+            song_duration = get_song_duration(song_list[index])
+            if song_duration == 0:
+                return
+            pygame.mixer.music.play()
+            is_playing = True
+            status_text.value = f"Reproduciendo: {Path(song_list[index]).name}"
+            page.update()
+
+    def toggle_pause(e):
+        nonlocal is_playing
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.pause()
+            is_playing = False
+            status_text.value = "Pausado"
+        else:
+            pygame.mixer.music.unpause()
+            is_playing = True
+        page.update()
+
+    def stop_song(e):
+        pygame.mixer.music.stop()
+        is_playing = False
+        status_text.value = "Detenido"
+        page.update()
+
     upload_button = ft.ElevatedButton("Subir Música", icon=ft.icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=True))
     folder_button = ft.ElevatedButton("Subir Carpeta", icon=ft.icons.FOLDER_OPEN, on_click=lambda _: folder_picker.get_directory_path())
+    
+    play_button = ft.IconButton(icon=ft.icons.PLAY_ARROW, on_click=lambda _: play_song(0, uploaded_songs))
+    pause_button = ft.IconButton(icon=ft.icons.PAUSE, on_click=toggle_pause)
+    stop_button = ft.IconButton(icon=ft.icons.STOP, on_click=stop_song)
+
+    status_text = ft.Text("Sin reproducción", color="white", size=14)
 
     page.add(
         ft.Column([
@@ -69,6 +117,8 @@ def main(page: ft.Page):
             uploaded_table,
             ft.Text("Playlist", color="white", size=16, weight=ft.FontWeight.BOLD),
             playlist_table,
+            ft.Row([play_button, pause_button, stop_button], alignment=ft.MainAxisAlignment.CENTER),
+            status_text
         ], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
     )
 
