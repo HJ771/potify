@@ -5,6 +5,7 @@ from mutagen.mp3 import MP3
 import asyncio
 import os
 import sqlite3
+import pyperclip
 
 pygame.mixer.init()
 
@@ -51,10 +52,16 @@ def main(page: ft.Page):
                         cells=[
                             ft.DataCell(ft.Text(Path(file.path).name, color="white")),
                             ft.DataCell(
-                                ft.IconButton(
-                                    icon=ft.Icons.PLAY_ARROW,
-                                    on_click=lambda _, idx=index: play_song(idx, uploaded_songs),
-                                ),
+                                ft.Row([
+                                    ft.IconButton(
+                                        icon=ft.Icons.PLAY_ARROW,
+                                        on_click=lambda _, idx=index: play_song(idx, uploaded_songs),
+                                    ),
+                                    ft.IconButton(
+                                        icon=ft.Icons.CONTENT_COPY,
+                                        on_click=lambda _, path=file.path: copy_song_path(path),
+                                    ),
+                                ], spacing=5)
                             ),
                         ]
                     )
@@ -66,22 +73,21 @@ def main(page: ft.Page):
     status_text = ft.Text("Sin reproducción", color="white", size=14)
 
     async def update_progress():
-        while True:
-            if is_playing and current_song_index is not None:
-                try:
-                    position = pygame.mixer.music.get_pos() / 1000
-                    if position >= song_duration:
-                        next_index = current_song_index + 1
-                        if next_index < len(current_playlist):
-                            play_song(next_index, current_playlist)
-                        else:
-                            stop_song(None)
-                            break
-                    progress_slider.value = position
-                    progress_text.value = f"{format_time(position)} / {format_time(song_duration)}"
-                    page.update()
-                except Exception as e:
-                    print(f"Error en barra de tiempo: {e}")
+        while is_playing and current_song_index is not None:
+            try:
+                position = pygame.mixer.music.get_pos() / 1000
+                if position >= song_duration:
+                    next_index = current_song_index + 1
+                    if next_index < len(current_playlist):
+                        play_song(next_index, current_playlist)
+                    else:
+                        stop_song(None)
+                        break
+                progress_slider.value = position
+                progress_text.value = f"{format_time(position)} / {format_time(song_duration)}"
+                page.update()
+            except Exception as e:
+                print(f"Error en barra de tiempo: {e}")
             await asyncio.sleep(0.5)
 
     def play_song(index, song_list):
@@ -137,30 +143,73 @@ def main(page: ft.Page):
     pause_button = ft.IconButton(icon=ft.Icons.PAUSE, on_click=toggle_pause)
     stop_button = ft.IconButton(icon=ft.Icons.STOP, on_click=stop_song)
 
-    # Implementación de la base de datos SQLite
-    conn = sqlite3.connect("playlists.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            name TEXT NOT NULL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS playlist_songs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            playlist_id INTEGER, 
-            song_path TEXT,
-            FOREIGN KEY(playlist_id) REFERENCES playlists(id)
-        )
-    """)
-    conn.commit()
-    conn.close()
+    def create_playlist(name):
+        conn = sqlite3.connect("playlists.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO playlists(name) VALUES(?)", (name,))
+        conn.commit()
+        conn.close()
+
+    def add_song_to_playlist(playlist_id, song_path):
+        conn = sqlite3.connect("playlists.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO playlist_songs(playlist_id, song_path) VALUES(?, ?)",
+                      (playlist_id, song_path))
+        conn.commit()
+        conn.close()
+
+    def play_playlist():
+        conn = sqlite3.connect("playlists.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name FROM playlists")
+        playlists = cursor.fetchall()
+        conn.close()
+
+        if not playlists:
+            return
+
+        try:
+            playlist_id = int(input("ID de la playlist: "))
+            conn = sqlite3.connect("playlists.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT song_path FROM playlist_songs WHERE playlist_id=?", (playlist_id,))
+            songs = [row[0] for row in cursor.fetchall()]
+            conn.close()
+
+            if not songs:
+                return
+
+            current_playlist = songs
+            play_song(0, current_playlist)
+        except ValueError:
+            pass
+
+    def manage_playlists():
+        while True:
+            choice = input("Seleccione una opción: ").strip()
+
+            if choice == "1":
+                name = input("Nombre de la playlist: ").strip()
+                if name:
+                    create_playlist(name)
+            elif choice == "2":
+                play_playlist()
+            elif choice == "3":
+                break
+
+    manage_playlist_button = ft.ElevatedButton(
+        "Gestionar Playlists (Consola)",
+        icon=ft.Icons.LIBRARY_MUSIC,
+        on_click=lambda _: page.run_thread(manage_playlists),
+        bgcolor="#BB86FC",
+        color="#121212",
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
+    )
 
     page.add(
         ft.Column([
             ft.Container(title, alignment=ft.alignment.center, margin=ft.margin.only(top=20, bottom=20)),
-            ft.Row([upload_button], spacing=10),
+            ft.Row([upload_button, manage_playlist_button], spacing=10),
             ft.Container(
                 ft.Column([
                     ft.Text("Canciones Individuales", color="white", size=16, weight=ft.FontWeight.BOLD),
@@ -177,13 +226,12 @@ def main(page: ft.Page):
         alignment=ft.MainAxisAlignment.CENTER)
     )
 
+    def copy_song_path(path):
+        pyperclip.copy(path)
+
     def get_song_duration(file_path):
-        try:
-            audio = MP3(file_path)
-            return int(audio.info.length)
-        except Exception as e:
-            print(f"Error al obtener la duración: {e}")
-            return 0
+        audio = MP3(file_path)
+        return int(audio.info.length)
 
     def format_time(seconds):
         minutes = int(seconds // 60)
