@@ -184,23 +184,25 @@ def main(page: ft.Page):
         except ValueError:
             pass
 
-    def manage_playlists():
-        while True:
-            choice = input("Seleccione una opción: ").strip()
+    def copy_song_path(path):
+        pyperclip.copy(path)
 
-            if choice == "1":
-                name = input("Nombre de la playlist: ").strip()
-                if name:
-                    create_playlist(name)
-            elif choice == "2":
-                play_playlist()
-            elif choice == "3":
-                break
+    def get_song_duration(file_path):
+        try:
+            audio = MP3(file_path)
+            return int(audio.info.length)
+        except Exception:
+            return 0
+
+    def format_time(seconds):
+        minutes = int(seconds // 60)
+        seconds = int(seconds % 60)
+        return f"{minutes:02}:{seconds:02}"
 
     manage_playlist_button = ft.ElevatedButton(
         "Gestionar Playlists (Consola)",
         icon=ft.Icons.LIBRARY_MUSIC,
-        on_click=lambda _: page.run_thread(manage_playlists),
+        on_click=lambda _: page.run_thread(play_playlist),
         bgcolor="#BB86FC",
         color="#121212",
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
@@ -225,17 +227,5 @@ def main(page: ft.Page):
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER)
     )
-
-    def copy_song_path(path):
-        pyperclip.copy(path)
-
-    def get_song_duration(file_path):
-        audio = MP3(file_path)
-        return int(audio.info.length)
-
-    def format_time(seconds):
-        minutes = int(seconds // 60)
-        seconds = int(seconds % 60)
-        return f"{minutes:02}:{seconds:02}"
 
 ft.app(target=main)
