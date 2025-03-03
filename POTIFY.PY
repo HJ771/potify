@@ -73,21 +73,22 @@ def main(page: ft.Page):
     status_text = ft.Text("Sin reproducción", color="white", size=14)
 
     async def update_progress():
-        while is_playing and current_song_index is not None:
-            try:
-                position = pygame.mixer.music.get_pos() / 1000
-                if position >= song_duration:
-                    next_index = current_song_index + 1
-                    if next_index < len(current_playlist):
-                        play_song(next_index, current_playlist)
-                    else:
-                        stop_song(None)
-                        break
-                progress_slider.value = position
-                progress_text.value = f"{format_time(position)} / {format_time(song_duration)}"
-                page.update()
-            except Exception as e:
-                print(f"Error en barra de tiempo: {e}")
+        while True:
+            if is_playing and current_song_index is not None:
+                try:
+                    position = pygame.mixer.music.get_pos() / 1000
+                    if position >= song_duration:
+                        next_index = current_song_index + 1
+                        if next_index < len(current_playlist):
+                            play_song(next_index, current_playlist)
+                        else:
+                            stop_song(None)
+                            break
+                    progress_slider.value = position
+                    progress_text.value = f"{format_time(position)} / {format_time(song_duration)}"
+                    page.update()
+                except Exception as e:
+                    print(f"Error en barra de tiempo: {e}")
             await asyncio.sleep(0.5)
 
     def play_song(index, song_list):
@@ -149,6 +150,7 @@ def main(page: ft.Page):
         cursor.execute("INSERT INTO playlists(name) VALUES(?)", (name,))
         conn.commit()
         conn.close()
+        print(f"Playlist '{name}' creada.")
 
     def add_song_to_playlist(playlist_id, song_path):
         conn = sqlite3.connect("playlists.db")
@@ -157,6 +159,7 @@ def main(page: ft.Page):
                       (playlist_id, song_path))
         conn.commit()
         conn.close()
+        print(f"Canción añadida a la playlist {playlist_id}.")
 
     def play_playlist():
         conn = sqlite3.connect("playlists.db")
@@ -166,7 +169,12 @@ def main(page: ft.Page):
         conn.close()
 
         if not playlists:
+            print("No hay playlists disponibles.")
             return
+
+        print("Playlists disponibles:")
+        for pid, name in playlists:
+            print(f"{pid}: {name}")
 
         try:
             playlist_id = int(input("ID de la playlist: "))
@@ -177,32 +185,63 @@ def main(page: ft.Page):
             conn.close()
 
             if not songs:
+                print("La playlist está vacía.")
                 return
 
             current_playlist = songs
             play_song(0, current_playlist)
         except ValueError:
-            pass
+            print("ID inválido.")
 
-    def copy_song_path(path):
-        pyperclip.copy(path)
+    def manage_playlists():
+        while True:
+            print("\n--- Gestión de Playlists ---")
+            print("1. Crear nueva playlist")
+            print("2. Añadir canción a playlist")
+            print("3. Reproducir playlist")
+            print("4. Salir")
+            choice = input("Seleccione una opción: ").strip()
 
-    def get_song_duration(file_path):
-        try:
-            audio = MP3(file_path)
-            return int(audio.info.length)
-        except Exception:
-            return 0
+            if choice == "1":
+                name = input("Nombre de la playlist: ").strip()
+                if name:
+                    create_playlist(name)
+            elif choice == "2":
+                conn = sqlite3.connect("playlists.db")
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name FROM playlists")
+                playlists = cursor.fetchall()
+                conn.close()
 
-    def format_time(seconds):
-        minutes = int(seconds // 60)
-        seconds = int(seconds % 60)
-        return f"{minutes:02}:{seconds:02}"
+                if not playlists:
+                    print("No hay playlists disponibles.")
+                    continue
+
+                print("Playlists disponibles:")
+                for pid, name in playlists:
+                    print(f"{pid}: {name}")
+
+                try:
+                    playlist_id = int(input("ID de la playlist: "))
+                    song_path = input("Ruta de la canción: ").strip()
+                    if os.path.exists(song_path):
+                        add_song_to_playlist(playlist_id, song_path)
+                    else:
+                        print("Ruta inválida.")
+                except ValueError:
+                    print("ID inválido.")
+            elif choice == "3":
+                play_playlist()
+            elif choice == "4":
+                print("Saliendo...")
+                break
+            else:
+                print("Opción no válida.")
 
     manage_playlist_button = ft.ElevatedButton(
         "Gestionar Playlists (Consola)",
         icon=ft.Icons.LIBRARY_MUSIC,
-        on_click=lambda _: page.run_thread(play_playlist),
+        on_click=lambda _: page.run_thread(manage_playlists),
         bgcolor="#BB86FC",
         color="#121212",
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
@@ -227,5 +266,26 @@ def main(page: ft.Page):
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER)
     )
+
+    conn = sqlite3.connect("playlists.db")
+
+    conn.close()
+
+    def copy_song_path(path):
+        pyperclip.copy(path)
+        print(f"Ruta copiada: {path}")
+
+    def get_song_duration(file_path):
+        try:
+            audio = MP3(file_path)
+            return int(audio.info.length)
+        except Exception as e:
+            print(f"Error al obtener la duración: {e}")
+            return 0
+
+    def format_time(seconds):
+        minutes = int(seconds // 60)
+        seconds = int(seconds % 60)
+        return f"{minutes:02}:{seconds:02}"
 
 ft.app(target=main)
